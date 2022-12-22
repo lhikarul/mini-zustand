@@ -1,38 +1,23 @@
+import { useState } from "react";
 import create from "./core/index";
 
 const [useStore] = create((set) => ({
-  // Everything in here is your state
-  count: 1,
-  // You don't have to nest your actions, but makes it easier to fetch them later on
-  actions: {
-    inc: () => set((state) => ({ count: state.count + 1 })), // same semantics as setState
-    dec: () => set((state) => ({ count: state.count - 1 })),
+  books: {
+    javascript: "javascript book",
+    css: "css book",
   },
 }));
 
-function Counter() {
-  // Will only re-render the component when "count" changes
-  const count = useStore((state) => state.count);
-
-  return <h1>{count}</h1>;
-}
-
-function Controls() {
-  // "actions" isn't special, we just named it like that to fetch updaters easier
-  const { inc, dec } = useStore((state) => state.actions);
-  return (
-    <>
-      <button onClick={inc}>up</button>
-      <button onClick={dec}>down</button>
-    </>
-  );
-}
-
 function App() {
+  const [title, setTitle] = useState("javascript");
+  const book = useStore((state) => state.books[title], [title]);
+  const [count, setCount] = useState(0);
+
   return (
     <div>
-      <Counter />
-      <Controls />
+      <div>{book}</div>
+      <button onClick={() => setCount(count + 1)}>{count}</button>
+      <button onClick={() => setTitle("css")}>change book</button>
     </div>
   );
 }

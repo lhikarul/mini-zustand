@@ -4,14 +4,14 @@ export default function create(fn) {
   let listeners = [];
   let state = {
     current: fn(
-      // an argument passes to the create
-      // equivalent to the set parameter of create
+      // set function
       (merge) => {
+        // merge => state updater
         if (typeof merge === "function") {
           merge = merge(state.current);
         }
         state.current = { ...state.current, ...merge };
-        listeners.forEach((listener) => listener(state.current));
+        listeners.forEach((listener) => listener());
       },
       () => state.current
     ),
@@ -24,6 +24,7 @@ export default function create(fn) {
 
       const [slice, set] = React.useState(() => selected);
       React.useEffect(() => {
+        console.log("rendered");
         const ping = () => {
           let selected = selector ? selector(state.current) : state.current;
           if (slice !== selected) {
@@ -32,6 +33,7 @@ export default function create(fn) {
         };
         listeners.push(ping);
         return () => (listeners = listeners.filter((i) => i == ping));
+        // dependencies --> Memoizing selectors
       }, dependencies || [selector]);
 
       return selected;
