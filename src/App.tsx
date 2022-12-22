@@ -2,22 +2,27 @@ import { useState } from "react";
 import create from "./core/index";
 
 const [useStore] = create((set) => ({
-  books: {
-    javascript: "javascript book",
-    css: "css book",
+  result: "unfetch",
+  fetch: async (url) => {
+    const response = await fetch(url);
+    const json = await response.json();
+    set({ result: json });
   },
 }));
 
 function App() {
-  const [title, setTitle] = useState("javascript");
-  const book = useStore((state) => state.books[title], [title]);
-  const [count, setCount] = useState(0);
+  const { result, fetch } = useStore();
 
   return (
     <div>
-      <div>{book}</div>
-      <button onClick={() => setCount(count + 1)}>{count}</button>
-      <button onClick={() => setTitle("css")}>change book</button>
+      <div>{JSON.stringify(result)}</div>
+      <div>
+        <button
+          onClick={() => fetch("https://jsonplaceholder.typicode.com/todos/1")}
+        >
+          fetch todo list
+        </button>
+      </div>
     </div>
   );
 }
