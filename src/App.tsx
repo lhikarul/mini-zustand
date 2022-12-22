@@ -1,6 +1,6 @@
-import create, { miniCreate } from "./core/index";
+import create from "./core/index";
 
-const [useStore] = miniCreate((set) => ({
+const [useStore] = create((set) => ({
   // Everything in here is your state
   count: 1,
   // You don't have to nest your actions, but makes it easier to fetch them later on
