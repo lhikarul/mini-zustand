@@ -11,7 +11,8 @@ export default function create(fn) {
           merge = merge(state.current);
         }
         state.current = { ...state.current, ...merge };
-        listeners.forEach((listener) => listener());
+        // state.current is for subscribe function
+        listeners.forEach((listener) => listener(state.current));
       },
       () => state.current
     ),
