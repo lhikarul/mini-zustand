@@ -1,8 +1,8 @@
 import React from "react";
 
 export default function create(fn) {
-  let listeners = [];
   let state = {
+    listeners: [],
     current: fn(
       // set function
       (merge) => {
@@ -10,9 +10,9 @@ export default function create(fn) {
         if (typeof merge === "function") {
           merge = merge(state.current);
         }
-        state.current = { ...state.current, ...merge };
+        state.current = Object.assign({}, state.current, merge);
         // state.current is for subscribe function
-        listeners.forEach((listener) => listener(state.current));
+        state.listeners.forEach((listener) => listener(state.current));
       },
       () => state.current
     ),
@@ -21,7 +21,7 @@ export default function create(fn) {
   return [
     // useStore
     (selector, dependencies) => {
-      let selected = selector ? selector(state.current) : { ...state.current };
+      let selected = selector ? selector(state.current) : state.current;
 
       const [slice, set] = React.useState(() => selected);
 
@@ -30,9 +30,7 @@ export default function create(fn) {
       React.useEffect(() => {
         const ping = () => {
           // Get fresh selected state
-          let selected = selector
-            ? selector(state.current)
-            : { ...state.current };
+          let selected = selector ? selector(state.current) : state.current;
           // If state is not equal from the get go and not an atomic then shallow equal it
           if (
             sliceRef.current !== selected &&
@@ -42,7 +40,7 @@ export default function create(fn) {
             selected = Object.entries(selected).reduce(
               (acc, [key, value]) =>
                 sliceRef.current[key] !== value
-                  ? { ...acc, [key]: value }
+                  ? Object.assign({}, acc, { [key]: value })
                   : acc,
               sliceRef.current
             );
@@ -53,8 +51,9 @@ export default function create(fn) {
             set(() => selected);
           }
         };
-        listeners.push(ping);
-        return () => (listeners = listeners.filter((i) => i == ping));
+        state.listeners.push(ping);
+        return () =>
+          (state.listeners = state.listeners.filter((i) => i == ping));
         // dependencies --> Memoizing selectors
       }, dependencies || [selector]);
 
@@ -62,14 +61,11 @@ export default function create(fn) {
     },
     {
       subscribe: (fn) => {
-        listeners.push(fn);
-        return () => (listeners = listeners.filter((i) => i != fn));
+        state.listeners.push(fn);
+        return () => (state.listeners = state.listeners.filter((i) => i != fn));
       },
       getState: () => state.current,
-      destory: () => {
-        listeners = [];
-        state.current = [];
-      },
+      destory: () => ((state.listeners = []), (state.current = {})),
     },
   ];
 }
