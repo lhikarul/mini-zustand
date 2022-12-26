@@ -1,30 +1,31 @@
 import { useState } from "react";
 import create from "./core/index";
 
-const [, api] = create((set) => ({
-  name: "Evans",
-  age: 18,
+const [useStore] = create((set) => ({
+  count: 0,
+  books: {
+    javascript: "javascript book",
+    css: "css book",
+  },
   actions: {
-    setAge: () => set((state) => ({ age: state.age + 1 })),
+    inc: () => set((state) => ({ count: state.count + 1 })),
   },
 }));
-
-window.api = api;
-
-api.subscribe((state) =>
-  console.log("i log whenever state changes", state.age)
-);
-
-const actions = api.getState().actions;
-
 function App() {
-  const [, setUpdate] = useState({});
-  const handleSetAge = () => {
-    actions.setAge();
-    setUpdate({});
-  };
+  const [title, setTitle] = useState("javascript");
+  const book = useStore((state) => state.books[title]);
+  const count = useStore((state) => state.count);
+  const { inc } = useStore((state) => state.actions);
+  const [count2, setCount] = useState(0);
 
-  return <div onClick={handleSetAge}>{api.getState().age}</div>;
+  return (
+    <div>
+      <div>{book}</div>
+      <button onClick={inc}>useStore {count}</button>
+      <button onClick={() => setCount(count2 + 1)}>useState {count2}</button>
+      <button onClick={() => setTitle("css")}>change book</button>
+    </div>
+  );
 }
 
 export default App;

@@ -1,65 +1,65 @@
 import React from "react";
 import shallowEqual from "./shallowEqual";
 
-export default function create(fn) {
-  let state = {
-    listeners: [],
-    current: fn(
-      // set function
-      (merge) => {
-        // merge => state updater
-        if (typeof merge === "function") {
-          merge = merge(state.current);
-        }
-        state.current = Object.assign({}, state.current, merge);
-        // state.current is for subscribe function
-        state.listeners.forEach((listener) => listener(state.current));
-      },
-      () => state.current
-    ),
+export default function create(createState) {
+  const listeners = new Set();
+
+  const setState = (partialState) => {
+    state = Object.assign(
+      {},
+      state,
+      typeof partialState === "function" ? partialState(state) : partialState
+    );
+    listeners.forEach((listener) => listener(state));
   };
 
-  return [
-    // useStore
-    (selector, dependencies) => {
-      let selected = selector ? selector(state.current) : state.current;
+  const getState = () => state;
 
-      const [slice, set] = React.useState(() => selected);
+  const subscribe = (listener) => {
+    listeners.add(listener);
+    return () => {
+      listeners.delete(listener);
+    };
+  };
 
-      const sliceRef = React.useRef();
+  const destroy = () => {
+    listeners.clear();
+    state = {};
+  };
 
-      React.useEffect(() => {
-        const ping = () => {
-          // Get fresh selected state
-          let selected = selector ? selector(state.current) : state.current;
-          // If state is not equal from the get go and not an atomic then shallow equal it
-          if (sliceRef.current !== selected && selected === Object(selected)) {
-            selected = Object.entries(selected).reduce(
-              (acc, [key, value]) =>
-                sliceRef.current[key] !== value
-                  ? Object.assign({}, acc, { [key]: value })
-                  : acc,
-              sliceRef.current
-            );
-          }
-          // Using functional initial b/c selected itself could be a function
-          if (!shallowEqual(sliceRef.current, selected)) set(() => selected);
-        };
-        state.listeners.push(ping);
-        return () =>
-          (state.listeners = state.listeners.filter((i) => i == ping));
-        // dependencies --> Memoizing selectors
-      }, dependencies || [selector]);
+  function useStore(selector) {
+    // Gets entire state if no selector was passed in
+    const selectState = typeof selector === "function" ? selector : getState;
+    // Using functional initial b/c selected itself could be a function
+    const [stateSlice, setStateSlice] = React.useState(() =>
+      selectState(state)
+    );
+    // Prevent useEffect from needing to run when values change by storing them in a ref object
+    const refs = React.useRef({ stateSlice, selectState }).current;
+    // Update refs when needed and only after view has been updated
+    React.useEffect(() => {
+      refs.stateSlice = stateSlice;
+      refs.selectState = selectState;
+    }, [stateSlice, selectState]);
 
-      return selected;
-    },
-    {
-      subscribe: (fn) => {
-        state.listeners.push(fn);
-        return () => (state.listeners = state.listeners.filter((i) => i != fn));
-      },
-      getState: () => state.current,
-      destory: () => ((state.listeners = []), (state.current = {})),
-    },
-  ];
+    // Subscribe/unsubscribe to the store only on mount/unmount
+    React.useEffect(() => {
+      return subscribe(() => {
+        // Get fresh selected state
+        const selected = refs.selectState(state);
+        if (!shallowEqual(refs.stateSlice, selected))
+          // Refresh local slice, functional initial b/c selected itself could be a function
+          setStateSlice(() => selected);
+      });
+    }, []);
+
+    // Returning the selected state slice
+    return stateSlice;
+  }
+
+  let state = createState(setState, getState);
+  const api = { destroy, getState, setState, subscribe };
+  const result: [typeof useStore, typeof api] = [useStore, api];
+
+  return result;
 }
