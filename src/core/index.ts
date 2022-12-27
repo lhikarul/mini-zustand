@@ -1,8 +1,10 @@
-import React, { useEffect, useLayoutEffect, useReducer, useRef } from "react";
+import { useEffect, useLayoutEffect, useReducer, useRef } from "react";
 import shallowEqual from "./shallowEqual";
 
-const useIsomorphicLayoutEffect =
-  typeof window !== "undefined" ? useLayoutEffect : useEffect;
+const forceUpdateReducer = (state: boolean) => !state;
+
+const useIsoLayoutEffect =
+  typeof window === "undefined" ? useEffect : useLayoutEffect;
 
 const reducer = (state, newState) => newState;
 
@@ -14,76 +16,84 @@ export default function create(createState) {
       typeof partial === "function" ? partial(state) : partial;
     if (partialState !== state) {
       state = Object.assign({}, state, partialState);
-      listeners.forEach((listener) => listener(state));
+      listeners.forEach((listener) => listener());
     }
   };
 
   const getState = () => state;
 
-  const subscribe = (selectorOrListener, listenerOrUndef) => {
-    let listener = selectorOrListener;
-
-    if (listenerOrUndef) {
-      const selector = selectorOrListener;
-      let stateSlice = selector(state);
-      listener = () => {
-        const selectedSlice = selector(state);
-        if (!shallowEqual(stateSlice, (stateSlice = selectedSlice)))
-          listenerOrUndef(stateSlice);
-      };
+  const subscribe = (listener, options) => {
+    if (!("currentSlice" in options)) {
+      options.currentSlice = (options.selector || getState)(state);
     }
-    listeners.add(listener);
-    return () => void listeners.delete(listener);
+    const listenerFn = () => {
+      // Destructure in the listener to get current values. We rely on this
+      // because options is mutated in useStore.
+      const { selector = getState, equalityFn = Object.is } = options;
+      // Selector or equality function could throw but we don't want to stop
+      // the listener from being called.
+      // https://github.com/react-spring/zustand/pull/37
+      try {
+        const newStateSlice = selector(state);
+        if (!equalityFn(options.currentSlice, newStateSlice)) {
+          listener((options.currentSlice = newStateSlice));
+        }
+      } catch (error) {
+        options.subscribeError = error;
+        listener();
+      }
+    };
+    listeners.add(listenerFn);
+
+    return () => void listeners.delete(listenerFn);
   };
 
   const destroy = () => {
     listeners.clear();
   };
 
-  const useStore = (selector, dependencies) => {
-    const selectorRef = useRef(selector);
-    const depsRef = useRef(dependencies);
-    let [stateSlice, dispatch] = useReducer(
-      reducer,
-      state,
-      // Optional third argument but required to not be 'undefined'
-      selector
-    );
+  const useStore = (selector = getState, equalityFn = Object.is) => {
+    if (Array.isArray(equalityFn)) {
+      equalityFn = Object.is;
+      console.warn(
+        "Zustand: the 2nd arg for dependencies was deprecated in 1.0. Please remove it! See: https://github.com/react-spring/zustand#selecting-multiple-state-slices"
+      );
+    }
+    const isInitial = useRef(true);
+    const options = useRef(
+      // isInitial prevents the selector from being called every render.
+      isInitial.current && {
+        selector,
+        equalityFn,
+        currentSlice: ((isInitial.current = false), selector(state)),
+      }
+    ).current;
 
-    // Need to manually get state slice if selector has changed with no deps or
-    // deps exist and have changed
-    if (
-      selector &&
-      ((!dependencies && selector !== selectorRef.current) ||
-        (dependencies && !shallowEqual(dependencies, depsRef.current)))
-    ) {
-      stateSlice = selector(state);
+    // Update state slice if selector has changed or subscriber errored.
+    if (selector !== options.selector || options.subscribeError) {
+      const newStateSlice = selector(state);
+      if (!equalityFn(options.currentSlice, newStateSlice)) {
+        options.currentSlice = newStateSlice;
+      }
     }
 
-    // Update refs synchronously after view has been updated
-    useIsomorphicLayoutEffect(() => {
-      selectorRef.current = selector;
-      depsRef.current = dependencies;
-    }, dependencies || [selector]);
+    useIsoLayoutEffect(() => {
+      options.selector = selector;
+      options.equalityFn = equalityFn;
+      options.subscribeError = undefined;
+    });
 
-    useIsomorphicLayoutEffect(() => {
-      return selector
-        ? subscribe(
-            // Truthy check because it might be possible to set selectorRef to
-            // undefined and call this subscriber before it resubscribes
-            () => (selectorRef.current ? selectorRef.current(state) : state),
-            dispatch
-          )
-        : subscribe(dispatch);
-      // Only resubscribe to the store when changing selector from function to
-      // undefined or undefined to function
-    }, [!selector]);
+    const forceUpdate = useReducer(forceUpdateReducer, false)[1];
 
-    return stateSlice;
+    useIsoLayoutEffect(() => subscribe(forceUpdate, options), []);
+
+    return options.currentSlice;
   };
 
   let api = { destroy, getState, setState, subscribe };
-  let state = createState(setState, getState);
+  let state = createState(setState, getState, api);
 
   return [useStore, api];
 }
+
+export { create };
