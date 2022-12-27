@@ -1,5 +1,8 @@
-import React, { useLayoutEffect, useReducer, useRef } from "react";
+import React, { useEffect, useLayoutEffect, useReducer, useRef } from "react";
 import shallowEqual from "./shallowEqual";
+
+const useIsomorphicLayoutEffect =
+  typeof window !== "undefined" ? useLayoutEffect : useEffect;
 
 const reducer = (state, newState) => newState;
 
@@ -58,12 +61,12 @@ export default function create(createState) {
     }
 
     // Update refs synchronously after view has been updated
-    useLayoutEffect(() => {
+    useIsomorphicLayoutEffect(() => {
       selectorRef.current = selector;
       depsRef.current = dependencies;
     }, dependencies || [selector]);
 
-    useLayoutEffect(() => {
+    useIsomorphicLayoutEffect(() => {
       return selector
         ? subscribe(
             // Truthy check because it might be possible to set selectorRef to
@@ -79,7 +82,8 @@ export default function create(createState) {
     return stateSlice;
   };
 
+  let api = { destroy, getState, setState, subscribe };
   let state = createState(setState, getState);
 
-  return [useStore, { destroy, getState, setState, subscribe }];
+  return [useStore, api];
 }
