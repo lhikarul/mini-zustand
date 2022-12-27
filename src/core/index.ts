@@ -1,5 +1,7 @@
-import React from "react";
+import React, { useEffect, useReducer, useRef } from "react";
 import shallowEqual from "./shallowEqual";
+
+const reducer = (state, newState) => newState;
 
 export default function create(createState) {
   const listeners = new Set();
@@ -27,39 +29,43 @@ export default function create(createState) {
     state = {};
   };
 
-  function useStore(selector) {
-    // Gets entire state if no selector was passed in
+  function useStore(selector, dependencies) {
+    // State selector gets entire state if no selector was passed in
     const selectState = typeof selector === "function" ? selector : getState;
-    // Using functional initial b/c selected itself could be a function
-    const [stateSlice, setStateSlice] = React.useState(() =>
-      selectState(state)
-    );
-    // Prevent useEffect from needing to run when values change by storing them in a ref object
-    const refs = React.useRef({ stateSlice, selectState }).current;
-    // Update refs when needed and only after view has been updated
-    React.useEffect(() => {
-      refs.stateSlice = stateSlice;
-      refs.selectState = selectState;
-    }, [stateSlice, selectState]);
+    const selectStateRef = useRef(selectState);
+    const dependenciesRef = useRef(dependencies);
+    console.log("state ", state);
+    let [stateSlice, dispatch] = useReducer(reducer, state, selectState);
+
+    if (
+      (!dependencies && selectState !== selectStateRef.current) ||
+      !shallowEqual(dependencies, dependenciesRef.current)
+    )
+      stateSlice = selectState(state);
+
+    // Store in ref to enable updating without rerunning subscribe/unsubscribe
+    const stateSliceRef = useRef(stateSlice);
+
+    // Update refs only after view has been updated
+    useEffect(() => void (selectStateRef.current = selectState), [selectState]);
+    useEffect(() => void (stateSliceRef.current = stateSlice), [stateSlice]);
 
     // Subscribe/unsubscribe to the store only on mount/unmount
-    React.useEffect(() => {
+    useEffect(() => {
       return subscribe(() => {
-        // Get fresh selected state
-        const selected = refs.selectState(state);
-        if (!shallowEqual(refs.stateSlice, selected))
-          // Refresh local slice, functional initial b/c selected itself could be a function
-          setStateSlice(() => selected);
+        // Use the last selector passed to useStore to get current state slice
+        const selectedSlice = selectStateRef.current(state);
+        // Shallow compare previous state slice with current and rerender only if changed
+        if (!shallowEqual(stateSliceRef.current, selectedSlice))
+          dispatch(selectedSlice);
       });
     }, []);
 
-    // Returning the selected state slice
     return stateSlice;
   }
 
   let state = createState(setState, getState);
   const api = { destroy, getState, setState, subscribe };
-  const result: [typeof useStore, typeof api] = [useStore, api];
 
-  return result;
+  return [useStore, api];
 }
