@@ -1,9 +1,9 @@
 import { useState } from "react";
 // import create from "./core/index";
-import create from "./core/react";
+// import create from "./core/react";
+import create from "./mini";
 
 const useCountStore = create((set) => {
-  console.log("set ", set);
   return {
     count: 0,
     actions: {
@@ -16,6 +16,7 @@ const useCountStore = create((set) => {
 function App() {
   const count = useCountStore((state) => state.count);
   const { inc, dec } = useCountStore((state) => state.actions);
+
   return (
     <div>
       <div>{count}</div>
